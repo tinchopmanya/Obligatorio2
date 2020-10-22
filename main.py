@@ -36,7 +36,6 @@ def escucharAnuncios():
     while True:
         data, addr = client.recvfrom(1024)
 
-
         #if ipEsteEquipo != addr[0]:
         print(" UDP Recibido con origen :  " + addr[0] )
         #print(" UDP Recibido en IP : " + ipEsteEquipo + " -  origen :  " + addr[0] )
@@ -53,11 +52,7 @@ def escucharAnuncios():
 
         #print(equipos)
 
-        #for f in equipos:
-        #    print(f.ip)
-
-
-
+        if equipo.ip != ipEsteEquipo:
             x = data.decode().split("\n")
 
             #print(len(x))
@@ -66,8 +61,8 @@ def escucharAnuncios():
                     if strlinea != "ANNOUNCE":
                         #print(strlinea)
                         h = strlinea.split("\t")
+                        Archiv = Objetos.Archivo(0, "0", "0", "0")
                         if len(h) == 3 :
-                            Archiv = Objetos.Archivo(0, "0","0","0")
                             for fl in equipo.archivos:
                                 if fl.md5 ==  h[2]:
                                     Archiv = fl
@@ -104,14 +99,10 @@ def anunciarArchivos():
         for arc in archivos:
             stringarc = ""
             stringarc = stringarc + arc
-            #dirname = os.path.dirname(__file__)
-            #folderName = os.path.join(dirname, 'compartida', '')
-            #sizefile = os.stat(folderName + arc).st_size
-            #md5suma = hashlib.md5(open(folderName + arc, 'rb').read()).hexdigest()
-
-            sizefile = os.stat("compartida\\" + arc).st_size
-            md5suma = hashlib.md5(open("compartida\\" + arc, 'rb').read()).hexdigest()
-
+            dirname = os.path.dirname("__file__")
+            folderName = os.path.join(dirname, 'compartida', '')
+            sizefile = os.stat(folderName + arc).st_size
+            md5suma = hashlib.md5(open(folderName + arc, 'rb').read()).hexdigest()
             mensaje = mensaje + stringarc + "\t" + str(sizefile) + "\t" + md5suma + "\n"
         sock.sendto( mensaje.encode() , ('<broadcast>', 2020))
         #print("mensaje enviado al puerto 2020 (anunciarArchivos)\n")
@@ -285,14 +276,20 @@ def terminalConsola():
             strval = getListArchivos()
             strMen = "\r\n" +  strval + "\r\n"
             conn.sendall(strMen.encode())  # 1
-        if concat == 'exit' and barran == 1:
+        elif concat == 'exit' and barran == 1:
+            #cerrar los sockets no esta funcionando por alguna razon?
+            #conn.close()
+            #s.close()
             break
-        if concat.find('get ') == 0 and barran == 1:
+        elif concat.find('get ') == 0 and barran == 1:
             retorno , archivo = ObtenerArchivoADescargar(concat.replace('get ', ''))
             retorno = retorno + descargarArchivo(archivo)
 
             conn.sendall(retorno.encode())
 
+            barran = 0
+            concat = ""
+        elif barran == 1:
             barran = 0
             concat = ""
     conn.close()
@@ -318,7 +315,7 @@ def terminalConsola():
 
 if __name__ == '__main__':
     Objetos.Archivo.contidArchivo = 0
-    #ipEsteEquipo = [ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] if not ip.startswith("127.")][:1][0]
+    ipEsteEquipo = [ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] if not ip.startswith("127.")][:1][0]
 
     # Hilo para hacer los anuncios de archivos UDP
     hiloAnuncios = threading.Thread(target=anunciarArchivos, args=())

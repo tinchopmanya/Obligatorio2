@@ -9,7 +9,10 @@ def retornarNombre(name):
 
 
 def guardarParte( data , nombreArhivo , nroParte ):
-    archivoPDF = open(nombreArhivo + nroParte, 'wb')  # abre el archivo datos.txt
+    dirname = os.path.dirname(__file__)
+    rutaArchivo = os.path.join(dirname, 'temp', '', nombreArhivo + str(nroParte))
+    archivoPDF = open(rutaArchivo, 'wb')  # abre el archivo datos.txt
+    #archivoPDF = open(nombreArhivo + nroParte, 'wb')  # abre el archivo datos.txt
     archivoPDF.write(data)
     archivoPDF.close()
 
@@ -31,7 +34,9 @@ def ObtenerContenidoArchivo( nombreArhivo ):
 
 
 def UltimaParte( nombreArhivo , cantidadPartes):
-    archivoPDF = open(nombreArhivo, 'rb')  # abre el archivo datos.txt
+    dirname = os.path.dirname(__file__)
+    rutaArchivo = os.path.join(dirname, 'compartida', '', nombreArhivo)
+    archivoPDF = open(rutaArchivo, 'rb')  # abre el archivo datos.txt
     contenido = archivoPDF.read()
     archivoPDF.close()
     total = len(contenido)
@@ -39,7 +44,9 @@ def UltimaParte( nombreArhivo , cantidadPartes):
     return rest
 
 def cantidadPartes( nombreArhivo ):
-    archivoPDF = open(nombreArhivo, 'rb')  # abre el archivo datos.txt
+    dirname = os.path.dirname(__file__)
+    rutaArchivo = os.path.join(dirname, 'compartida', '', nombreArhivo)
+    archivoPDF = open(rutaArchivo, 'rb')  # abre el archivo datos.txt
     contenido = archivoPDF.read()
     archivoPDF.close()
     total = len(contenido)
@@ -66,7 +73,8 @@ def atenderCliente( num_hilo, conexion , addr , **datos):
     print(respuesta)
     print(parteArchivo)
 
-    conexion.send(b"prueba")
+    #conexion.send(b"prueba")
+    conexion.send(parteArchivo)
 
     conexion.close()
 
@@ -86,6 +94,7 @@ def clienteTCP(archivoToDescargar, parte , desde, hasta , ip, **datos):
     misocket.send(solicitud.encode())
 
     respuesta = misocket.recv(hasta + 1024 - desde)
-    print(respuesta.decode())
+    guardarParte(respuesta, archivoToDescargar.nombre , parte)
+    print(respuesta)
     print(len(respuesta))
     misocket.close()
