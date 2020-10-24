@@ -3,6 +3,7 @@ import os
 import threading
 from random import random
 
+import TCPManager
 import utilesFiles
 import Objetos
 import socket
@@ -16,7 +17,7 @@ ipEsteEquipo = ""
 equipos = []
 misArchivos = []
 listaArchivos = []
-
+tambloqueGlobal  = 1024000
 
 def getListArchivos():
     strRetorno = ""
@@ -37,8 +38,8 @@ def escucharAnuncios():
         data, addr = client.recvfrom(1024)
 
         #if ipEsteEquipo != addr[0]:
-        print(" UDP Recibido con origen :  " + addr[0] )
-        #print(" UDP Recibido en IP : " + ipEsteEquipo + " -  origen :  " + addr[0] )
+        #print(" UDP Recibido con origen :  " + addr[0] )
+        print(" UDP Recibido en IP : " + ipEsteEquipo + " -  origen :  " + addr[0] )
 
         equipo =  Objetos.Equipo("0")
 
@@ -112,57 +113,36 @@ def anunciarArchivos():
 
 
 
-# Escucha conecciones de descarga y abre un nuevo hilo
-# con destino el metodo utilesFiles.atenderCliente
-def servidorTCP():
-    misocket = socket.socket()
-    misocket.bind(("", 2020))
-    misocket.listen(5)
-    print(" Nueva conexion estableida")
 
-    num_hilo = 0
-    while True:
-        conexion, addr = misocket.accept()
-        print(" Nueva conexion estableida")
-        print(addr)
+    
 
 
-        num_hilo = num_hilo + 1
-        hilo = threading.Thread(target=utilesFiles.atenderCliente,
-                                args=(num_hilo, conexion, addr))
-        hilo.start()
+# Retorna el Peer (Host) , a partir de su ip
+def obtenerPeer(archivoToDescargar, ip):
+    peerRet = Objetos.Peer(0,0)
+    for peer in archivoToDescargar.peers:
+        if peer.ip == ip :
+            peerRet = peer
+
+    return peerRet
 
 
-
-
-
-
-def descargarParteDeArchivo(parte , archivoToDescargar, desde , hasta , ip ):
-    print(" -parte : " + str(parte) + " " + archivoToDescargar.nombre + " - desde : " + str(desde) + " - hasta : " + str(hasta) + " - ip : " + str(ip) )
-
-    hilo = threading.Thread(target=utilesFiles.clienteTCP,
-                            args=( archivoToDescargar, parte , desde , hasta, ip ),
-                            kwargs={})
-    hilo.start()
-    return " -parte : " + str(parte) + " " + archivoToDescargar.nombre + " - desde : " + str(desde) + " - hasta : " + str(hasta) + " - ip : " + str(ip) + " \r\n"
-
-
-
+# Este metodo se encarga de...
+# 1 - Realizar la descarga del archivo del cual se hizo el get en la consola
+#      abriendo un hilo para la descarga en paralelo para cada host que posee el archivo
+# 2 - Esperar que se descarguen todas las partes de todos los peers(hosts)
+# 3 - Unificar el archivo final a partir de las partes descargadas, y eliminar las partes
 def descargarArchivo(archivoToDescargar):
     cantidadHost = len(archivoToDescargar.ips)
-    print(" - cantidad Host : " + str(cantidadHost) )
-    print(" - tamanio : " + str(archivoToDescargar.largo))
-
     total = int( archivoToDescargar.largo)
-
-    tamBlock = 1000
+    tamBlock = tambloqueGlobal
     cant = int( total / tamBlock)
     rest = total - ( cant * tamBlock)
     if rest > 0 :
         cant = cant + 1
-
-    print(" - cantidad " + str(cant))
-    print(" - rest " + str(rest))
+    for ip in archivoToDescargar.ips:
+        peer =  Objetos.Peer(ip,0)
+        archivoToDescargar.peers.append(peer)
 
     desde = 0
     strret = ""
@@ -172,23 +152,84 @@ def descargarArchivo(archivoToDescargar):
             hasta = desde +  rest
         else:
             hasta = desde + tamBlock
-        strret =  strret + descargarParteDeArchivo(  i , archivoToDescargar, desde , hasta , archivoToDescargar.ips[ipnumero])
-        desde = desde + tamBlock
+       
+    parte =  Objetos.ParteArchivo(i, archivoToDescargar.ips[ipnumero], desde , hasta , 0)
+    archivoToDescargar.partes.append(parte)
+    desde = desde + tamBlock
+    
+    for parte in archivoToDescargar.partes:
+        peer = obtenerPeer(archivoToDescargar,parte.ip)
+        peer.partes.append(parte)
 
+    # Se inicia un hilo para cada host que tiene el archivo
+    # permitiendo que el archivo se descargue en paralelo entre los host destinos
+    for peer in archivoToDescargar.peers:
+        hilo = threading.Thread(target=TCPManager.DescargarPartesFromPeer,
+                            args=( archivoToDescargar, peer ),
+                            kwargs={})
+        hilo.start()
+
+    # Para cada host del cual se esta realizando la descarga
+    # solo se puede continuar si los hilos abiertos, ya descargaron todas las partes
+    # Por lo tanto el objetivo del for siguiente, es esperar que las descargas terminen
+    for peer in archivoToDescargar.peers:
+        cont = 0
+        while peer.finalizado == 0:
+           cont = cont + 1
+           time.sleep(1)
+
+
+    nroParte = 0
+    
+    time.sleep(1) 
+    cantPartes = len(archivoToDescargar.partes)
+
+    suma = 0
+    archivoTotal = ""
+    for i in range (cantPartes):        
+        cont = UtilesFiles.ObtenerContenidoArchivo(archivoToDescargar.nombre + str(i))
+        archivoTotal = archivoTotal + cont        
+        suma = suma + len(cont)
+
+
+    # Se guarda todo el archivo unificado en la carpeta compartida.
+
+    UtilesFiles.GuardarArchivo(archivoTotal, "compartida" , archivoToDescargar.nombre)
+    print( "Archivo Descargado , borrando las partes temporales" )
+    archivoTotal = ""
+
+    # Se borran todas las partes temporales del archivo ya descargado
+    for i in range (cantPartes):
+        UtilesFiles.BorrarParte(archivoToDescargar.nombre + str(i))
+
+    index = 0
+    indexToDelete = -1
+    for fl in listaArchivos:
+        if fl.md5 == archivoToDescargar.md5:
+            indexToDelete = index
+        index = index + 1
+
+    if indexToDelete > -1:
+        del(listaArchivos[indexToDelete])
+    else:
+        print(" No Se elimino el archivo de la lista de archivos")
+
+    strret = " Se termino de descargar el archivo, puede encontrarlo en la carpeta compartida"
     return  strret
 
 
 
 
 
-# Busca el archivo a descargar a partir del nuemero
+# Busca el archivo a descargar a partir del numero que lo identifica en el comando list
+
 def ObtenerArchivoADescargar(numeroArchivo):
     archivoToDescargar =  Objetos.Archivo(0, "0","0","0")
     ipsToDownload = []
     for  arch in listaArchivos:
         if arch.idArchivo == int(numeroArchivo):
             archivoToDescargar = arch
-    print("Descargando archivo " + archivoToDescargar.nombre)
+    #print("Descargando archivo " + archivoToDescargar.nombre)
 
     for eq in equipos:
         for arc in eq.archivos:
@@ -201,29 +242,9 @@ def ObtenerArchivoADescargar(numeroArchivo):
         cont = cont + 1
         if len(archivoToDescargar.ips) > cont:
             destinos = destinos + " , "
-    return "Descargando archivo :  ---->  '" + archivoToDescargar.nombre + "' \r\nDesde los host : " + destinos + "\r\n" , archivoToDescargar
+    return "Descargando Archivo:  ---->  '" + archivoToDescargar.nombre + "' \r\nDesde los host : " + destinos + "\r\n" , archivoToDescargar
 
 
-# Solicita la descarga de un archivo
-def clienteTCP():
-    misocket = socket.socket()
-    misocket.connect(('localhost', 8000))
-
-    fileMD5 = "ute.pdf"
-    start = 0
-    size = 1024
-    solicitud = "DOWNLOAD\n"
-    solicitud = solicitud + "<fileMD5>\n"
-    solicitud = solicitud + "<" + str(start) + ">\n"
-    solicitud = solicitud + "<" + str(size) + ">\n"
-    misocket.send(str.encode(solicitud))
-
-    respuesta = misocket.recv(1024)
-    print(respuesta.decode())
-    respuesta = misocket.recv(200000)
-    print(respuesta.decode())
-    print(len(respuesta))
-    misocket.close()
 
 
 def ls(ruta='.'):
@@ -235,7 +256,7 @@ def ls(ruta='.'):
 
 
 
-
+#  terminal telnet
 def terminalConsola():
     host = ''  # (2)
     port = 23  # (3)
@@ -260,11 +281,6 @@ def terminalConsola():
         else:
             concat = concat + data
 
-
-
-        # if (concat.find('\n') != -1):
-        #    print("Contains given substring ")
-        #else:
         print(data + "--" + concat)
         if enviado == 0:
             enviado = 1
@@ -283,7 +299,9 @@ def terminalConsola():
             break
         elif concat.find('get ') == 0 and barran == 1:
             retorno , archivo = ObtenerArchivoADescargar(concat.replace('get ', ''))
-            retorno = retorno + descargarArchivo(archivo)
+            conn.sendall(retorno.encode())
+
+            retorno = descargarArchivo(archivo)
 
             conn.sendall(retorno.encode())
 
@@ -297,18 +315,7 @@ def terminalConsola():
 
     print(data)
 
-    if concat == 'asds':
-        v = utilesFiles.cantidadPartes('ute.pdf')
-        cont = utilesFiles.ObtenerContenidoArchivo('ute.pdf')
-        print(v)
 
-        for i in range(v):
-            desde = (i) * 1024
-            parte = cont[desde:(desde + 1024)]
-            print(desde)
-            print(parte)
-            print(len(parte))
-            utilesFiles.guardarParte(parte, 'ute.pdf', str(i))
 
 
 
@@ -330,7 +337,7 @@ if __name__ == '__main__':
     hiloterminalConsola.start()
 
     # Hilo para responder solicitudes de descarga
-    hiloservidorTCP = threading.Thread(target=servidorTCP, args=())
+    hiloservidorTCP = threading.Thread(target=TCPManager.ServidorTCP, args=())
     hiloservidorTCP.start()
 
 
