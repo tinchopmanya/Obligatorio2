@@ -240,9 +240,15 @@ def descargarArchivo(archivoToDescargar):
 def ObtenerArchivoADescargar(numeroArchivo):
     archivoToDescargar =  Objetos.Archivo(0, "0","0","0")
     ipsToDownload = []
+
+    encontre = 0
     for  arch in listaArchivos:
         if arch.idArchivo == int(numeroArchivo):
             archivoToDescargar = arch
+            encontre = 1
+    
+    if encontre == 0:
+        raise Exception("La ID ingresada no es correcta")
     #print("Descargando archivo " + archivoToDescargar.nombre)
 
     for eq in equipos:
@@ -290,19 +296,24 @@ def terminalConsola():
             if not data.endswith("\r\n"):
                 continue
             splitted_data = data.split()
-            if data == "list\r\n":
-                strListArchivos = "\r\n" + getListArchivos() + "\r\n"
-                conn.sendall(strListArchivos.encode())
-            elif (splitted_data[0] == 'get' and len(splitted_data) == 2):
-                retorno , archivo = ObtenerArchivoADescargar(splitted_data[1])
-                conn.sendall(retorno.encode())
-                retorno = descargarArchivo(archivo)
-                conn.sendall(retorno.encode())
-            elif (splitted_data[0] == 'offer' and len(splitted_data) == 2):
-                print() #falta implementar
-            else:
-                conn.sendall("Wrong command\r\n".encode())
-            data = ""
+            if len(splitted_data) != 0:
+                if data == "list\r\n":
+                    strListArchivos = "\r\n" + getListArchivos() + "\r\n"
+                    conn.sendall(strListArchivos.encode())
+                elif (splitted_data[0] == 'get' and len(splitted_data) == 2) and splitted_data[1].isdigit():
+                    try:
+                        retorno , archivo = ObtenerArchivoADescargar(splitted_data[1])
+                        conn.sendall(retorno.encode())
+                        retorno = descargarArchivo(archivo)
+                        conn.sendall(retorno.encode())
+                    except Exception as msg:
+                        conn.sendall((str(msg)+"\r\n").encode())
+
+                elif (splitted_data[0] == 'offer' and len(splitted_data) == 2):
+                    print() #falta implementar
+                else:
+                    conn.sendall("Error en el comando\r\n".encode())
+                data = ""
             conn.sendall(b'>')
         print('Cerrando socket conn')
         conn.close()
