@@ -224,6 +224,7 @@ def descargarArchivo(archivoToDescargar):
 
     if indexToDelete > -1:
         del(listaArchivos[indexToDelete])
+        misArchivos.append(archivoToDescargar.md5)
     else:
         print(" No Se elimino el archivo de la lista de archivos")
 
