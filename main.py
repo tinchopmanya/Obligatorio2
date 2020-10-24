@@ -63,23 +63,35 @@ def escucharAnuncios():
                         #print(strlinea)
                         h = strlinea.split("\t")
                         Archiv = Objetos.Archivo(0, "0", "0", "0")
+                        ultimoAnuncio = time.time()
                         if len(h) == 3 :
                             for fl in equipo.archivos:
-                                if fl.md5 ==  h[2]:
+                                if fl.md5 == h[2]:
                                     Archiv = fl
                             if Archiv.md5 == "0":
                                 for fl in listaArchivos:
                                     if fl.md5 == h[2]:
                                         fl.ips.append(addr[0])
+                                        peer = Objetos.Peer(addr[0], 0, ultimoAnuncio)
+                                        fl.peers.append(peer)
                                         Archiv = fl
                                 if Archiv.md5 == "0":
                                     Objetos.Archivo.contidArchivo = Objetos.Archivo.contidArchivo + 1
                                     Archiv = Objetos.Archivo(Objetos.Archivo.contidArchivo, h[0], h[1], h[2])
+                                    peer = Objetos.Peer(equipo.ip, 0, ultimoAnuncio)
+                                    Archiv.peers.append(peer)
                                     Archiv.ips.append(addr[0])
                                     equipo.archivos.append(Archiv)
                                     listaArchivos.append(Archiv)
                                 else:
+                                    for peer in Archiv.peers:
+                                        if peer.ip == equipo.ip:
+                                            peer.ultimoAnuncio = ultimoAnuncio
                                     equipo.archivos.append(Archiv)
+                            else:
+                                    for peer in Archiv.peers:
+                                        if peer.ip == equipo.ip:
+                                            peer.ultimoAnuncio = ultimoAnuncio
 
 
 
@@ -119,7 +131,7 @@ def anunciarArchivos():
 
 # Retorna el Peer (Host) , a partir de su ip
 def obtenerPeer(archivoToDescargar, ip):
-    peerRet = Objetos.Peer(0,0)
+    peerRet = Objetos.Peer(0,0,0)
     for peer in archivoToDescargar.peers:
         if peer.ip == ip :
             peerRet = peer
@@ -141,7 +153,7 @@ def descargarArchivo(archivoToDescargar):
     if rest > 0 :
         cant = cant + 1
     for ip in archivoToDescargar.ips:
-        peer =  Objetos.Peer(ip,0)
+        peer =  Objetos.Peer(ip,0,0)
         archivoToDescargar.peers.append(peer)
 
     desde = 0
@@ -187,20 +199,20 @@ def descargarArchivo(archivoToDescargar):
     suma = 0
     archivoTotal = ""
     for i in range (cantPartes):        
-        cont = UtilesFiles.ObtenerContenidoArchivo(archivoToDescargar.nombre + str(i))
+        cont = utilesFiles.ObtenerContenidoArchivo(archivoToDescargar.nombre + str(i))
         archivoTotal = archivoTotal + cont        
         suma = suma + len(cont)
 
 
     # Se guarda todo el archivo unificado en la carpeta compartida.
 
-    UtilesFiles.GuardarArchivo(archivoTotal, "compartida" , archivoToDescargar.nombre)
+    utilesFiles.GuardarArchivo(archivoTotal, "compartida" , archivoToDescargar.nombre)
     print( "Archivo Descargado , borrando las partes temporales" )
     archivoTotal = ""
 
     # Se borran todas las partes temporales del archivo ya descargado
     for i in range (cantPartes):
-        UtilesFiles.BorrarParte(archivoToDescargar.nombre + str(i))
+        utilesFiles.BorrarParte(archivoToDescargar.nombre + str(i))
 
     index = 0
     indexToDelete = -1
@@ -316,8 +328,25 @@ def terminalConsola():
     print(data)
 
 
-
-
+# Borra archivos que no fueron anunciados hace mas de 90 segundos
+def borrarArchivos():
+    while True:
+        time.sleep(10)
+        tiempoActual = time.time()
+        for archivo in listaArchivos:
+            for peer in archivo.peers:
+                print("tiempo actual - ultimo" + str(tiempoActual - peer.ultimoAnuncio))
+                if (tiempoActual - peer.ultimoAnuncio > 90):
+                    print("hay que borrar")
+                    print(peer.ip)
+                    for eq in equipos:
+                        if eq.ip == peer.ip:
+                            eq.archivos.remove(archivo)
+                    archivo.peers.remove(peer)
+            if len(archivo.peers) == 0:
+                print("borrado de la lista")
+                print(archivo.nombre)
+                listaArchivos.remove(archivo)
 
 
 if __name__ == '__main__':
@@ -340,6 +369,9 @@ if __name__ == '__main__':
     hiloservidorTCP = threading.Thread(target=TCPManager.ServidorTCP, args=())
     hiloservidorTCP.start()
 
+    # Hilo para borrar archivos
+    hiloBorrarArchivos = threading.Thread(target=borrarArchivos, args=())
+    hiloBorrarArchivos.start()
 
 
 

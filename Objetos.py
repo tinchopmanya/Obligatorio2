@@ -30,9 +30,10 @@ class Archivo :
 	
 	
 class Peer :
-    def __init__(self,  ip , finalizado ):
+    def __init__(self,  ip, finalizado, ultimoAnuncio):
         self.ip = ip
         self.finalizado = finalizado
+        self.ultimoAnuncio = ultimoAnuncio
         self.partes = []
 		
 

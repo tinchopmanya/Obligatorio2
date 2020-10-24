@@ -31,8 +31,8 @@ def ClienteTCP(archivoToDescargar, parte , desde, hasta , ip, **datos):
     misocket = socket.socket()
     misocket.connect((ip, 2020))
     misocket.send(solicitud.encode())
-    respuesta = misocket.recv(hasta + UtilesFiles.tambloqueGlobal - desde)
-    UtilesFiles.GuardarArchivo(respuesta, "temp",  archivoToDescargar.nombre + str(parte))
+    respuesta = misocket.recv(hasta + utilesFiles.tambloqueGlobal - desde)
+    utilesFiles.GuardarArchivo(respuesta, "temp",  archivoToDescargar.nombre + str(parte))
     misocket.close()
 
 
@@ -58,11 +58,11 @@ def ServidorTCP():
 
 # Atiende los clientes del lado del servidor TCP , retornando la parte del archivo solicitada
 def AtenderCliente( num_hilo, conexion , addr , **datos):
-    respuesta = conexion.recv(UtilesFiles.tambloqueGlobal).decode()
+    respuesta = conexion.recv(utilesFiles.tambloqueGlobal).decode()
     splitResp = re.sub('[<>]', '', respuesta).split('\n')
     nombreArchivo = splitResp[1]
     desde = splitResp[3]
     cant = splitResp[4]
-    parteArchivo = UtilesFiles.ObtenerParte(nombreArchivo, desde, cant)
+    parteArchivo = utilesFiles.ObtenerParte(nombreArchivo, desde, cant)
     conexion.send(parteArchivo)
     conexion.close()
