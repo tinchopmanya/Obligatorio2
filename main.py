@@ -51,8 +51,6 @@ def escucharAnuncios():
             equipo = Objetos.Equipo(addr[0])
             equipos.append(equipo)
 
-        #print(equipos)
-
         if equipo.ip != ipEsteEquipo:
             x = data.decode().split("\n")
 
@@ -65,33 +63,34 @@ def escucharAnuncios():
                         Archiv = Objetos.Archivo(0, "0", "0", "0")
                         ultimoAnuncio = time.time()
                         if len(h) == 3 :
-                            for fl in equipo.archivos:
-                                if fl.md5 == h[2]:
-                                    Archiv = fl
-                            if Archiv.md5 == "0":
-                                for fl in listaArchivos:
+                            if (misArchivos.count(h[2]) == 0):
+                                for fl in equipo.archivos:
                                     if fl.md5 == h[2]:
-                                        fl.ips.append(addr[0])
-                                        peer = Objetos.Peer(addr[0], 0, ultimoAnuncio)
-                                        fl.peers.append(peer)
                                         Archiv = fl
                                 if Archiv.md5 == "0":
-                                    Objetos.Archivo.contidArchivo = Objetos.Archivo.contidArchivo + 1
-                                    Archiv = Objetos.Archivo(Objetos.Archivo.contidArchivo, h[0], h[1], h[2])
-                                    peer = Objetos.Peer(equipo.ip, 0, ultimoAnuncio)
-                                    Archiv.peers.append(peer)
-                                    Archiv.ips.append(addr[0])
-                                    equipo.archivos.append(Archiv)
-                                    listaArchivos.append(Archiv)
+                                    for fl in listaArchivos:
+                                        if fl.md5 == h[2]:
+                                            fl.ips.append(addr[0])
+                                            peer = Objetos.Peer(addr[0], 0, ultimoAnuncio)
+                                            fl.peers.append(peer)
+                                            Archiv = fl
+                                    if Archiv.md5 == "0":
+                                        Objetos.Archivo.contidArchivo = Objetos.Archivo.contidArchivo + 1
+                                        Archiv = Objetos.Archivo(Objetos.Archivo.contidArchivo, h[0], h[1], h[2])
+                                        peer = Objetos.Peer(equipo.ip, 0, ultimoAnuncio)
+                                        Archiv.peers.append(peer)
+                                        Archiv.ips.append(addr[0])
+                                        equipo.archivos.append(Archiv)
+                                        listaArchivos.append(Archiv)
+                                    else:
+                                        for peer in Archiv.peers:
+                                            if peer.ip == equipo.ip:
+                                                peer.ultimoAnuncio = ultimoAnuncio
+                                        equipo.archivos.append(Archiv)
                                 else:
-                                    for peer in Archiv.peers:
-                                        if peer.ip == equipo.ip:
-                                            peer.ultimoAnuncio = ultimoAnuncio
-                                    equipo.archivos.append(Archiv)
-                            else:
-                                    for peer in Archiv.peers:
-                                        if peer.ip == equipo.ip:
-                                            peer.ultimoAnuncio = ultimoAnuncio
+                                        for peer in Archiv.peers:
+                                            if peer.ip == equipo.ip:
+                                                peer.ultimoAnuncio = ultimoAnuncio
 
 
 
@@ -117,6 +116,8 @@ def anunciarArchivos():
             sizefile = os.stat(folderName + arc).st_size
             md5suma = hashlib.md5(open(folderName + arc, 'rb').read()).hexdigest()
             mensaje = mensaje + stringarc + "\t" + str(sizefile) + "\t" + md5suma + "\n"
+            if (misArchivos.count(md5suma) == 0):
+                misArchivos.append(md5suma)
         sock.sendto( mensaje.encode() , ('<broadcast>', 2020))
         #print("mensaje enviado al puerto 2020 (anunciarArchivos)\n")
         aleatorio = random()
@@ -271,61 +272,40 @@ def ls(ruta='.'):
 #  terminal telnet
 def terminalConsola():
     host = ''  # (2)
-    port = 23  # (3)
+    port = 2025  # (3)
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # (4)
     s.bind((host, port))  # (5)
     s.listen(1024)  # (7)
-    conn, addr = s.accept()  # (9)
 
-    print('Connected with ' + addr[0] + ':' + str(addr[1]))  # (10)
-
-    data = ""
-    concat = ""
-    enviado = 0
-    fin = 0
-    barran = 0
-    while (fin == 0):
+    while (True):
+        conn, addr = s.accept()
+        conn.sendall(b'>')
         data = ""
-        data = conn.recv(1024).decode()  # 11
-        if (data.find('\n') > -1):
-            barran = 1
-        else:
-            concat = concat + data
+        while (True):
+            data += conn.recv(1024).decode()
+            if not data:
+                break
+            if not data.endswith("\r\n"):
+                continue
+            splitted_data = data.split()
+            if data == "list\r\n":
+                strListArchivos = "\r\n" + getListArchivos() + "\r\n"
+                conn.sendall(strListArchivos.encode())
+            elif (splitted_data[0] == 'get' and len(splitted_data) == 2):
+                retorno , archivo = ObtenerArchivoADescargar(splitted_data[1])
+                conn.sendall(retorno.encode())
+                retorno = descargarArchivo(archivo)
+                conn.sendall(retorno.encode())
+            elif (splitted_data[0] == 'offer' and len(splitted_data) == 2):
+                print() #falta implementar
+            else:
+                conn.sendall("Wrong command\r\n".encode())
+            data = ""
+            conn.sendall(b'>')
+        print('Cerrando socket conn')
+        conn.close()
 
-        print(data + "--" + concat)
-        if enviado == 0:
-            enviado = 1
-            conn.sendall(data.encode())  # 1
-
-        if concat == 'list' and barran == 1:
-            barran = 0
-            concat = ""
-            strval = getListArchivos()
-            strMen = "\r\n" +  strval + "\r\n"
-            conn.sendall(strMen.encode())  # 1
-        elif concat == 'exit' and barran == 1:
-            #cerrar los sockets no esta funcionando por alguna razon?
-            #conn.close()
-            #s.close()
-            break
-        elif concat.find('get ') == 0 and barran == 1:
-            retorno , archivo = ObtenerArchivoADescargar(concat.replace('get ', ''))
-            conn.sendall(retorno.encode())
-
-            retorno = descargarArchivo(archivo)
-
-            conn.sendall(retorno.encode())
-
-            barran = 0
-            concat = ""
-        elif barran == 1:
-            barran = 0
-            concat = ""
-    conn.close()
-    s.close()  # 14
-
-    print(data)
 
 
 # Borra archivos que no fueron anunciados hace mas de 90 segundos
@@ -352,6 +332,13 @@ def borrarArchivos():
 if __name__ == '__main__':
     Objetos.Archivo.contidArchivo = 0
     ipEsteEquipo = [ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] if not ip.startswith("127.")][:1][0]
+
+    archivos = ls("compartida")
+    for arc in archivos:
+        dirname = os.path.dirname("__file__")
+        folderName = os.path.join(dirname, 'compartida', '')
+        md5suma = hashlib.md5(open(folderName + arc, 'rb').read()).hexdigest()
+        misArchivos.append(md5suma)
 
     # Hilo para hacer los anuncios de archivos UDP
     hiloAnuncios = threading.Thread(target=anunciarArchivos, args=())
