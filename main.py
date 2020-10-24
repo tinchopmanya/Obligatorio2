@@ -9,9 +9,7 @@ import Objetos
 import socket
 import time
 
-
 from os import walk
-
 
 ipEsteEquipo = ""
 equipos = []
@@ -26,10 +24,7 @@ def getListArchivos():
     return  strRetorno
 
 
-
-
 def escucharAnuncios():
-
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)  # UDP
     # Enable broadcasting mode
     client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -93,11 +88,7 @@ def escucharAnuncios():
                                                 peer.ultimoAnuncio = ultimoAnuncio
 
 
-
-
-
 def anunciarArchivos():
-
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
@@ -125,18 +116,12 @@ def anunciarArchivos():
         time.sleep(10 + aleatorio)
 
 
-
-
-    
-
-
 # Retorna el Peer (Host) , a partir de su ip
 def obtenerPeer(archivoToDescargar, ip):
     peerRet = Objetos.Peer(0,0,0)
     for peer in archivoToDescargar.peers:
         if peer.ip == ip :
             peerRet = peer
-
     return peerRet
 
 
@@ -191,7 +176,6 @@ def descargarArchivo(archivoToDescargar):
            cont = cont + 1
            time.sleep(1)
 
-
     nroParte = 0
     
     time.sleep(1) 
@@ -204,9 +188,7 @@ def descargarArchivo(archivoToDescargar):
         archivoTotal = archivoTotal + cont        
         suma = suma + len(cont)
 
-
     # Se guarda todo el archivo unificado en la carpeta compartida.
-
     utilesFiles.GuardarArchivo(archivoTotal, "compartida" , archivoToDescargar.nombre)
     print( "Archivo Descargado , borrando las partes temporales" )
     archivoTotal = ""
@@ -232,11 +214,7 @@ def descargarArchivo(archivoToDescargar):
     return  strret
 
 
-
-
-
 # Busca el archivo a descargar a partir del numero que lo identifica en el comando list
-
 def ObtenerArchivoADescargar(numeroArchivo):
     archivoToDescargar =  Objetos.Archivo(0, "0","0","0")
     ipsToDownload = []
@@ -265,15 +243,9 @@ def ObtenerArchivoADescargar(numeroArchivo):
     return "Descargando Archivo:  ---->  '" + archivoToDescargar.nombre + "' \r\nDesde los host : " + destinos + "\r\n" , archivoToDescargar
 
 
-
-
 def ls(ruta='.'):
     dir, subdirs, archivos = next(walk(ruta))
     return archivos
-
-
-
-
 
 
 #  terminal telnet
@@ -317,7 +289,6 @@ def terminalConsola():
             conn.sendall(b'>')
         print('Cerrando socket conn')
         conn.close()
-
 
 
 # Borra archivos que no fueron anunciados hace mas de 90 segundos
@@ -371,6 +342,3 @@ if __name__ == '__main__':
     # Hilo para borrar archivos
     hiloBorrarArchivos = threading.Thread(target=borrarArchivos, args=())
     hiloBorrarArchivos.start()
-
-
-
