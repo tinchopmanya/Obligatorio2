@@ -2,6 +2,7 @@ import hashlib
 import os
 import threading
 from random import random
+from random import uniform
 
 import TCPManager
 import utilesFiles
@@ -13,7 +14,7 @@ from os import walk
 
 ipEsteEquipo = ""
 equipos = []
-misArchivos = []
+misArchivos = {}
 listaArchivos = []
 tambloqueGlobal  = 1024000
 
@@ -58,7 +59,7 @@ def escucharAnuncios():
                         Archiv = Objetos.Archivo(0, "0", "0", "0")
                         ultimoAnuncio = time.time()
                         if len(h) == 3 :
-                            if (misArchivos.count(h[2]) == 0):
+                            if not tengo_ese_md5_en_misArchivos(h[2]):
                                 for fl in equipo.archivos:
                                     if fl.md5 == h[2]:
                                         Archiv = fl
@@ -86,12 +87,31 @@ def escucharAnuncios():
                                         for peer in Archiv.peers:
                                             if peer.ip == equipo.ip:
                                                 peer.ultimoAnuncio = ultimoAnuncio
+            elif x[0] == "REQUEST":
+                time.sleep(uniform(0,5))
+                mensaje = "ANNOUNCE\n"
+                archivos = ls("compartida")
+                for archivo in archivos:
+                    if misArchivos[arc]['offer'] == True:
+                        dirName = os.path.dirname("__file__")
+                        folderName = os.path.join(dirName, 'compartida', '')
+                        sizeFile = os.stat(folderName + archivo).st_size
+                        md5suma = hashlib.md5(open(folderName + archivo, 'rb').read()).hexdigest()
+                        mensaje += archivo + "\t" + str(sizeFile) + "\t" + md5suma + "\n"
+                if mensaje != "ANNOUNCE\n":
+                    client.sendto(mensaje.encode(), (addr[0], 2020))
 
+def tengo_ese_md5_en_misArchivos(md5):
+    for nombre in misArchivos:
+        if misArchivos[nombre]['md5'] == md5:
+                return True
+    return False
 
 def anunciarArchivos():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
+    sock.sendto( "REQUEST\n".encode() , ('<broadcast>', 2020))
     # Set a timeout so the socket does not block indefinitely when trying to receive data.
     sock.settimeout(0.2)
 
@@ -100,16 +120,18 @@ def anunciarArchivos():
         archivos = ls("compartida")
         stringarc = ""
         for arc in archivos:
-            stringarc = ""
-            stringarc = stringarc + arc
-            dirname = os.path.dirname("__file__")
-            folderName = os.path.join(dirname, 'compartida', '')
-            sizefile = os.stat(folderName + arc).st_size
-            md5suma = hashlib.md5(open(folderName + arc, 'rb').read()).hexdigest()
-            mensaje = mensaje + stringarc + "\t" + str(sizefile) + "\t" + md5suma + "\n"
-            if (misArchivos.count(md5suma) == 0):
-                misArchivos.append(md5suma)
-        sock.sendto( mensaje.encode() , ('<broadcast>', 2020))
+            if misArchivos[arc]['offer'] == True:
+                stringarc = ""
+                stringarc = stringarc + arc
+                dirname = os.path.dirname("__file__")
+                folderName = os.path.join(dirname, 'compartida', '')
+                sizefile = os.stat(folderName + arc).st_size
+                md5suma = hashlib.md5(open(folderName + arc, 'rb').read()).hexdigest()
+                mensaje = mensaje + stringarc + "\t" + str(sizefile) + "\t" + md5suma + "\n"
+                #if (misArchivos.count(md5suma) == 0):
+                #    misArchivos.append(md5suma)
+        if mensaje != "ANNOUNCE\n":
+            sock.sendto( mensaje.encode() , ('<broadcast>', 2020))
         #print("mensaje enviado al puerto 2020 (anunciarArchivos)\n")
         aleatorio = random()
         #  print( "\n numero aleatorio de 0 a 1 " + str(aleatorio))
@@ -151,9 +173,9 @@ def descargarArchivo(archivoToDescargar):
         else:
             hasta = desde + tamBlock
        
-    parte =  Objetos.ParteArchivo(i, archivoToDescargar.ips[ipnumero], desde , hasta , 0)
-    archivoToDescargar.partes.append(parte)
-    desde = desde + tamBlock
+        parte =  Objetos.ParteArchivo(i, archivoToDescargar.ips[ipnumero], desde , hasta , 0)
+        archivoToDescargar.partes.append(parte)
+        desde = desde + tamBlock
     
     for parte in archivoToDescargar.partes:
         peer = obtenerPeer(archivoToDescargar,parte.ip)
@@ -182,7 +204,7 @@ def descargarArchivo(archivoToDescargar):
     cantPartes = len(archivoToDescargar.partes)
 
     suma = 0
-    archivoTotal = ""
+    archivoTotal = b""
     for i in range (cantPartes):        
         cont = utilesFiles.ObtenerContenidoArchivo(archivoToDescargar.nombre + str(i))
         archivoTotal = archivoTotal + cont        
@@ -206,7 +228,7 @@ def descargarArchivo(archivoToDescargar):
 
     if indexToDelete > -1:
         del(listaArchivos[indexToDelete])
-        misArchivos.append(archivoToDescargar.md5)
+        misArchivos[archivoToDescargar.nombre] = { 'md5': archivoToDescargar.md5, 'offer': False}
     else:
         print(" No Se elimino el archivo de la lista de archivos")
 
@@ -278,14 +300,20 @@ def terminalConsola():
                         conn.sendall(retorno.encode())
                         retorno = descargarArchivo(archivo)
                         conn.sendall(retorno.encode())
+                        conn.sendall("\r\n".encode())
                     except Exception as msg:
                         conn.sendall((str(msg)+"\r\n").encode())
 
                 elif (splitted_data[0] == 'offer' and len(splitted_data) == 2):
-                    print() #falta implementar
+                    nombre = splitted_data[1]
+                    if misArchivos.get(nombre) != None:
+                        misArchivos[nombre]['offer'] = True
+                    else:
+                        conn.sendall("El nombre de archivo no existe\r\n".encode())
                 else:
                     conn.sendall("Error en el comando\r\n".encode())
                 data = ""
+            data = ""
             conn.sendall(b'>')
         print('Cerrando socket conn')
         conn.close()
@@ -315,13 +343,13 @@ def borrarArchivos():
 if __name__ == '__main__':
     Objetos.Archivo.contidArchivo = 0
     ipEsteEquipo = [ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] if not ip.startswith("127.")][:1][0]
-
+    
     archivos = ls("compartida")
     for arc in archivos:
         dirname = os.path.dirname("__file__")
         folderName = os.path.join(dirname, 'compartida', '')
         md5suma = hashlib.md5(open(folderName + arc, 'rb').read()).hexdigest()
-        misArchivos.append(md5suma)
+        misArchivos[arc] = { 'md5': md5suma, 'offer': False }
 
     # Hilo para hacer los anuncios de archivos UDP
     hiloAnuncios = threading.Thread(target=anunciarArchivos, args=())
