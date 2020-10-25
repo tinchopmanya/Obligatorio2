@@ -310,6 +310,9 @@ def terminalConsola():
                         misArchivos[nombre]['offer'] = True
                     else:
                         conn.sendall("El nombre de archivo no existe\r\n".encode())
+                elif (splitted_data[0] == 'exit'):
+                    conn.sendall("Cerrando conexion\r\n".encode())
+                    break
                 else:
                     conn.sendall("Error en el comando\r\n".encode())
                 data = ""
